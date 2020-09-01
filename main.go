@@ -8,14 +8,16 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/manifoldco/promptui"
 	work_messages "github.com/moraisworkrunner/work-messages"
+	uuid "github.com/satori/go.uuid"
 	"google.golang.org/protobuf/proto"
 )
 
 func main() {
 	target := os.Getenv("SERVICE_URL")
 	if target == "" {
-		target = "queue"
+		target = "http://:8080"
 	}
 
 	log.Print("starting webhook listener...")
@@ -23,6 +25,37 @@ func main() {
 	// Start the webhook listener
 	go startWebhook()
 
+	// Prompt for user input
+	for {
+		prompt := promptui.Select{
+			Label: "Select Task",
+			Items: []string{
+				"Good Request",
+				"Bad Request",
+				"Exit",
+			},
+		}
+		_, result, err := prompt.Run()
+		if err != nil {
+			fmt.Printf("Prompt failed %v\n", err)
+			continue
+		}
+		switch result {
+		case "Good Request":
+			sendWork(target, &work_messages.SvcWorkRequest{
+				WebhookUrl: ":8082",
+				Context: &work_messages.Context{
+					Id: uuid.NewV4().String(),
+				},
+			})
+		case "Bad Request":
+			// TODO: Make this cause a failure in the service to trigger retries, mitigation
+			sendWork(target, &work_messages.SvcWorkRequest{})
+		default:
+			os.Exit(0)
+		}
+		fmt.Printf("You choose %q\n", result)
+	}
 }
 
 func sendWork(url string, w *work_messages.SvcWorkRequest) {
@@ -56,7 +89,7 @@ func startWebhook() {
 	})
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8080"
+		port = "8082"
 	}
 	log.Printf("listening on port %s\n", port)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", port), nil))
