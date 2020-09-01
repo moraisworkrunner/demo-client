@@ -50,7 +50,7 @@ func sendWork(url string, w *work_messages.SvcWorkRequest) {
 }
 
 func startWebhook() {
-	http.HandleFunc("/", func(_ http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Printf("Webhook response received\n")
 		b, err := ioutil.ReadAll(r.Body)
 		if err != nil {
@@ -64,6 +64,7 @@ func startWebhook() {
 			return
 		}
 		fmt.Printf("Got work response: %v\n", workResponse.Context)
+		w.WriteHeader(http.StatusAccepted)
 	})
 	fmt.Printf("listening on port %s\n", port)
 	fmt.Print(http.ListenAndServe(fmt.Sprintf(":%s", port), nil))
@@ -71,12 +72,12 @@ func startWebhook() {
 }
 
 func userPrompt() {
-	target := os.Getenv("SERVICE_URL")
-	if target == "" {
-		target = "http://:8080"
+	serviceURL := os.Getenv("SERVICE_URL")
+	if serviceURL == "" {
+		serviceURL = "http://:8080"
 	}
 	webhookURL := ":8082"
-	if target != "http://:8080" {
+	if serviceURL != "http://:8080" {
 		externalIP := os.Getenv("EXTERNAL_IP")
 		if externalIP == "" {
 			fmt.Println("Set the EXTERNAL_IP env var")
@@ -101,12 +102,12 @@ func userPrompt() {
 		}
 		switch result {
 		case "Good Request":
-			sendWork(target, &work_messages.SvcWorkRequest{
+			sendWork(serviceURL, &work_messages.SvcWorkRequest{
 				WebhookUrl: webhookURL,
 				SourceFile: "source-file.png",
 			})
 		case "Bad Request":
-			sendWork(target, &work_messages.SvcWorkRequest{
+			sendWork(serviceURL, &work_messages.SvcWorkRequest{
 				WebhookUrl: webhookURL,
 				SourceFile: "invalid",
 			})
