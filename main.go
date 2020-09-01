@@ -10,52 +10,17 @@ import (
 
 	"github.com/manifoldco/promptui"
 	work_messages "github.com/moraisworkrunner/work-messages"
-	uuid "github.com/satori/go.uuid"
 	"google.golang.org/protobuf/proto"
 )
 
 func main() {
-	target := os.Getenv("SERVICE_URL")
-	if target == "" {
-		target = "http://:8080"
-	}
-
-	log.Print("starting webhook listener...")
 
 	// Start the webhook listener
+	log.Print("starting webhook listener...")
 	go startWebhook()
 
-	// Prompt for user input
-	for {
-		prompt := promptui.Select{
-			Label: "Select Task",
-			Items: []string{
-				"Good Request",
-				"Bad Request",
-				"Exit",
-			},
-		}
-		_, result, err := prompt.Run()
-		if err != nil {
-			fmt.Printf("Prompt failed %v\n", err)
-			continue
-		}
-		switch result {
-		case "Good Request":
-			sendWork(target, &work_messages.SvcWorkRequest{
-				WebhookUrl: ":8082",
-				Context: &work_messages.Context{
-					Id: uuid.NewV4().String(),
-				},
-			})
-		case "Bad Request":
-			// TODO: Make this cause a failure in the service to trigger retries, mitigation
-			sendWork(target, &work_messages.SvcWorkRequest{})
-		default:
-			os.Exit(0)
-		}
-		fmt.Printf("You choose %q\n", result)
-	}
+	// Prompt for user input, as desired
+	userPrompt()
 }
 
 func sendWork(url string, w *work_messages.SvcWorkRequest) {
@@ -65,7 +30,8 @@ func sendWork(url string, w *work_messages.SvcWorkRequest) {
 	}
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer(b))
 	if err != nil {
-		log.Fatalln(err)
+		fmt.Printf("Failed to post message: %v", err)
+		return
 	}
 	if resp.StatusCode != 202 {
 		fmt.Printf("Send work gave non 202 response: %d\n", resp.StatusCode)
@@ -93,4 +59,51 @@ func startWebhook() {
 	}
 	log.Printf("listening on port %s\n", port)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", port), nil))
+}
+
+func userPrompt() {
+	target := os.Getenv("SERVICE_URL")
+	if target == "" {
+		target = "http://:8080"
+	}
+	webhookURL := ":8082"
+	if target != "http://:8080" {
+		externalIP := os.Getenv("EXTERNAL_IP")
+		if externalIP == "" {
+			fmt.Println("Set the EXTERNAL_IP env var")
+			return
+		}
+	}
+
+	for {
+		prompt := promptui.Select{
+			Label: "Select Task",
+			Items: []string{
+				"Good Request",
+				"Bad Request",
+				"Exit",
+			},
+		}
+		_, result, err := prompt.Run()
+		if err != nil {
+			fmt.Printf("Prompt failed %v\n", err)
+			continue
+		}
+		switch result {
+		case "Good Request":
+			sendWork(target, &work_messages.SvcWorkRequest{
+				WebhookUrl: webhookURL,
+				SourceFile: "source-file.png",
+			})
+		case "Bad Request":
+			// TODO: Make this cause a failure in the service to trigger retries, mitigation
+			sendWork(target, &work_messages.SvcWorkRequest{
+				WebhookUrl: webhookURL,
+				SourceFile: "invalid",
+			})
+		default:
+			return
+		}
+		fmt.Printf("Sent %q\n", result)
+	}
 }
