@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
 
@@ -13,10 +12,22 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+const (
+	defaultPort = "8082"
+)
+
+var (
+	port = defaultPort
+)
+
 func main() {
+	port = os.Getenv("PORT")
+	if port == "" {
+		port = defaultPort
+	}
 
 	// Start the webhook listener
-	log.Print("starting webhook listener...")
+	fmt.Println("starting webhook listener...")
 	go startWebhook()
 
 	// Prompt for user input, as desired
@@ -40,6 +51,7 @@ func sendWork(url string, w *work_messages.SvcWorkRequest) {
 
 func startWebhook() {
 	http.HandleFunc("/", func(_ http.ResponseWriter, r *http.Request) {
+		fmt.Printf("Webhook response received\n")
 		b, err := ioutil.ReadAll(r.Body)
 		if err != nil {
 			fmt.Printf("Failed reading request: %v\n", r.Body)
@@ -53,12 +65,9 @@ func startWebhook() {
 		}
 		fmt.Printf("Got work response: %v\n", workResponse.Context)
 	})
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8082"
-	}
-	log.Printf("listening on port %s\n", port)
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", port), nil))
+	fmt.Printf("listening on port %s\n", port)
+	fmt.Print(http.ListenAndServe(fmt.Sprintf(":%s", port), nil))
+	os.Exit(0)
 }
 
 func userPrompt() {
@@ -73,6 +82,7 @@ func userPrompt() {
 			fmt.Println("Set the EXTERNAL_IP env var")
 			return
 		}
+		webhookURL = fmt.Sprintf("https://%s:%s/", externalIP, port)
 	}
 
 	for {
@@ -96,7 +106,6 @@ func userPrompt() {
 				SourceFile: "source-file.png",
 			})
 		case "Bad Request":
-			// TODO: Make this cause a failure in the service to trigger retries, mitigation
 			sendWork(target, &work_messages.SvcWorkRequest{
 				WebhookUrl: webhookURL,
 				SourceFile: "invalid",
